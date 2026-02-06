@@ -2151,9 +2151,18 @@
       var chunks = response._chunks,
         chunk = chunks.get(id);
       chunk ||
-        ((chunk = response._closed
-          ? new ReactPromise("rejected", null, response._closedReason)
-          : createPendingChunk(response)),
+        (response._closed
+          ? response._allowIncompleteStream
+            ? ((response = chunk = createPendingChunk(response)),
+              (response.status = "halted"),
+              (response.value = null),
+              (response.reason = null))
+            : (chunk = new ReactPromise(
+                "rejected",
+                null,
+                response._closedReason
+              ))
+          : (chunk = createPendingChunk(response)),
         chunks.set(id, chunk));
       return chunk;
     }
@@ -2932,6 +2941,7 @@
       encodeFormAction,
       nonce,
       temporaryReferences,
+      allowIncompleteStream,
       findSourceMapURL,
       replayConsole,
       environmentName,
@@ -2951,6 +2961,7 @@
       this._fromJSON = null;
       this._closed = !1;
       this._closedReason = null;
+      this._allowIncompleteStream = allowIncompleteStream;
       this._tempRefs = temporaryReferences;
       this._timeOrigin = 0;
       this._pendingInitialRender = null;
@@ -4696,7 +4707,28 @@
       };
     }
     function close(weakResponse) {
-      reportGlobalError(weakResponse, Error("Connection closed."));
+      if (void 0 !== weakResponse.weak.deref()) {
+        var response = unwrapWeakResponse(weakResponse);
+        response._allowIncompleteStream
+          ? ((response._closed = !0),
+            response._chunks.forEach(function (chunk) {
+              "pending" === chunk.status || "blocked" === chunk.status
+                ? (releasePendingChunk(response, chunk),
+                  (chunk.status = "halted"),
+                  (chunk.value = null),
+                  (chunk.reason = null))
+                : "fulfilled" === chunk.status &&
+                  null !== chunk.reason &&
+                  chunk.reason.close('"$undefined"');
+            }),
+            (weakResponse = response._debugChannel),
+            void 0 !== weakResponse &&
+              (closeDebugChannel(weakResponse),
+              (response._debugChannel = void 0),
+              null !== debugChannelRegistry &&
+                debugChannelRegistry.unregister(response)))
+          : reportGlobalError(weakResponse, Error("Connection closed."));
+      }
     }
     function noServerCall() {
       throw Error(
@@ -4713,6 +4745,10 @@
           options && options.temporaryReferences
             ? options.temporaryReferences
             : void 0,
+        allowIncompleteStream =
+          options && options.allowIncompleteStream
+            ? options.allowIncompleteStream
+            : !1,
         findSourceMapURL =
           options && options.findSourceMapURL
             ? options.findSourceMapURL
@@ -4740,6 +4776,7 @@
         encodeFormAction,
         nonce,
         temporaryReferences,
+        allowIncompleteStream,
         findSourceMapURL,
         replayConsole,
         environmentName,

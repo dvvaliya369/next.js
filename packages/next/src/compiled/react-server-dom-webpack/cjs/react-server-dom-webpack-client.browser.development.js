@@ -1462,6 +1462,9 @@
       this._debugChunk = null;
       this._debugInfo = [];
     }
+    function hasGCedResponse(weakResponse) {
+      return void 0 === weakResponse.weak.deref();
+    }
     function unwrapWeakResponse(weakResponse) {
       weakResponse = weakResponse.weak.deref();
       if (void 0 === weakResponse)
@@ -1897,7 +1900,7 @@
       }
     }
     function reportGlobalError(weakResponse, error) {
-      if (void 0 !== weakResponse.weak.deref()) {
+      if (!hasGCedResponse(weakResponse)) {
         var response = unwrapWeakResponse(weakResponse);
         response._closed = !0;
         response._closedReason = error;
@@ -2004,9 +2007,18 @@
       var chunks = response._chunks,
         chunk = chunks.get(id);
       chunk ||
-        ((chunk = response._closed
-          ? new ReactPromise("rejected", null, response._closedReason)
-          : createPendingChunk(response)),
+        (response._closed
+          ? response._allowIncompleteStream
+            ? ((response = chunk = createPendingChunk(response)),
+              (response.status = "halted"),
+              (response.value = null),
+              (response.reason = null))
+            : (chunk = new ReactPromise(
+                "rejected",
+                null,
+                response._closedReason
+              ))
+          : (chunk = createPendingChunk(response)),
         chunks.set(id, chunk));
       return chunk;
     }
@@ -2779,6 +2791,7 @@
       encodeFormAction,
       nonce,
       temporaryReferences,
+      allowIncompleteStream,
       findSourceMapURL,
       replayConsole,
       environmentName,
@@ -2798,6 +2811,7 @@
       this._fromJSON = null;
       this._closed = !1;
       this._closedReason = null;
+      this._allowIncompleteStream = allowIncompleteStream;
       this._tempRefs = temporaryReferences;
       this._timeOrigin = 0;
       this._pendingInitialRender = null;
@@ -4478,7 +4492,7 @@
       }
     }
     function processBinaryChunk(weakResponse, streamState, chunk) {
-      if (void 0 !== weakResponse.weak.deref()) {
+      if (!hasGCedResponse(weakResponse)) {
         weakResponse = unwrapWeakResponse(weakResponse);
         var i = 0,
           rowState = streamState._rowState,
@@ -4663,7 +4677,28 @@
       };
     }
     function close(weakResponse) {
-      reportGlobalError(weakResponse, Error("Connection closed."));
+      if (!hasGCedResponse(weakResponse)) {
+        var response = unwrapWeakResponse(weakResponse);
+        response._allowIncompleteStream
+          ? ((response._closed = !0),
+            response._chunks.forEach(function (chunk) {
+              "pending" === chunk.status || "blocked" === chunk.status
+                ? (releasePendingChunk(response, chunk),
+                  (chunk.status = "halted"),
+                  (chunk.value = null),
+                  (chunk.reason = null))
+                : "fulfilled" === chunk.status &&
+                  null !== chunk.reason &&
+                  chunk.reason.close('"$undefined"');
+            }),
+            (weakResponse = response._debugChannel),
+            void 0 !== weakResponse &&
+              (closeDebugChannel(weakResponse),
+              (response._debugChannel = void 0),
+              null !== debugChannelRegistry &&
+                debugChannelRegistry.unregister(response)))
+          : reportGlobalError(weakResponse, Error("Connection closed."));
+      }
     }
     function createDebugCallbackFromWritableStream(debugWritable) {
       var textEncoder = new TextEncoder(),
@@ -4695,6 +4730,10 @@
           options && options.temporaryReferences
             ? options.temporaryReferences
             : void 0,
+        allowIncompleteStream =
+          options && options.allowIncompleteStream
+            ? options.allowIncompleteStream
+            : !1,
         findSourceMapURL =
           options && options.findSourceMapURL
             ? options.findSourceMapURL
@@ -4714,6 +4753,7 @@
         void 0,
         void 0,
         temporaryReferences,
+        allowIncompleteStream,
         findSourceMapURL,
         replayConsole,
         environmentName,
@@ -4737,9 +4777,7 @@
             new Uint8Array(value)
           );
         else if ("string" === typeof value) {
-          if (
-            ((_ref = streamState), void 0 !== response$jscomp$0.weak.deref())
-          ) {
+          if (((_ref = streamState), !hasGCedResponse(response$jscomp$0))) {
             var response = unwrapWeakResponse(response$jscomp$0),
               i = 0,
               rowState = _ref._rowState,
@@ -5074,10 +5112,10 @@
       return hook.checkDCE ? !0 : !1;
     })({
       bundleType: 1,
-      version: "19.3.0-canary-95ffd6cd-20260205",
+      version: "19.3.0-canary-0796ad58-20260206",
       rendererPackageName: "react-server-dom-webpack",
       currentDispatcherRef: ReactSharedInternals,
-      reconcilerVersion: "19.3.0-canary-95ffd6cd-20260205",
+      reconcilerVersion: "19.3.0-canary-0796ad58-20260206",
       getCurrentComponentInfo: function () {
         return currentOwnerInDEV;
       }
