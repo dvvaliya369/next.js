@@ -6733,7 +6733,7 @@
           options ? options.startTime : void 0,
           options ? options.environmentName : void 0,
           options ? options.filterStackFrame : void 0,
-          void 0 !== debugChannel
+          void 0 !== debugChannelReadable
         ),
         hasStartedFlowing = !1;
       startWork(request);
